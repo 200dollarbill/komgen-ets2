@@ -434,7 +434,7 @@ begin
       skIntron:
       begin
         Inc(IntronNum);
-        AddOutputLine(Format('INTRON #%d   [pos %d..%d]   len=%d   << spliced out >>',
+        AddOutputLine(Format('INTRON #%d   [pos %d..%d]   len=%d spliced',
           [IntronNum, seg.StartIdx, seg.EndIdx, seg.EndIdx - seg.StartIdx + 1]),
           TAG_INTRON);
         AddOutputLine('  ' + seg.Sequence, TAG_INTRON);
@@ -448,7 +448,7 @@ begin
   lbOutput.Items.EndUpdate;
 
   lbSpliced.Items.Clear;
-  lbSpliced.Items.Add('SPLICED mRNA  (exons concatenated)');
+  lbSpliced.Items.Add('SPLICED mRNA');
   lbSpliced.Items.Add('Length: ' + IntToStr(Length(SplicedExon)) + ' nt');
   lbSpliced.Items.Add(SplicedExon);
 
