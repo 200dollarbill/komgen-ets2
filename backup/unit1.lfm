@@ -1,0 +1,108 @@
+object Form1: TForm1
+  Left = 200
+  Height = 697
+  Top = 80
+  Width = 715
+  Caption = 'Unit1'
+  ClientHeight = 697
+  ClientWidth = 715
+  OnCreate = FormCreate
+  object lblInput: TLabel
+    Left = 12
+    Height = 18
+    Top = 16
+    Width = 144
+    Caption = 'Input DNA Sequence '
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object lbInput: TListBox
+    Left = 12
+    Height = 72
+    Top = 36
+    Width = 674
+    Font.Height = -12
+    Font.Name = 'Courier New'
+    ItemHeight = 0
+    ParentFont = False
+    TabOrder = 0
+    TopIndex = -1
+  end
+  object btnRun: TButton
+    Left = 12
+    Height = 30
+    Top = 118
+    Width = 160
+    Caption = 'Run HMM Splicing'
+    Font.Height = -13
+    Font.Name = 'Sans'
+    ParentFont = False
+    TabOrder = 1
+    OnClick = btnRunClick
+  end
+  object btnClear: TButton
+    Left = 182
+    Height = 30
+    Top = 118
+    Width = 90
+    Caption = 'Clear'
+    TabOrder = 2
+    OnClick = btnClearClick
+  end
+  object pnlLegend: TPanel
+    Left = 12
+    Height = 26
+    Top = 176
+    Width = 460
+    BevelOuter = bvNone
+    ParentBackground = False
+    ParentColor = False
+    TabOrder = 3
+  end
+  object lbOutput: TListBox
+    Left = 12
+    Height = 248
+    Top = 192
+    Width = 674
+    Font.Height = -12
+    Font.Name = 'Courier New'
+    ItemHeight = 20
+    ParentFont = False
+    Style = lbOwnerDrawFixed
+    TabOrder = 4
+    TopIndex = -1
+    OnDrawItem = lbOutputDrawItem
+  end
+  object lblSpliced: TLabel
+    Left = 8
+    Height = 18
+    Top = 450
+    Width = 143
+    Caption = 'Output mRNA Exons'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object lbSpliced: TListBox
+    Left = 8
+    Height = 130
+    Top = 470
+    Width = 674
+    Font.Height = -12
+    Font.Name = 'Courier New'
+    ItemHeight = 20
+    ParentFont = False
+    Style = lbOwnerDrawFixed
+    TabOrder = 5
+    TopIndex = -1
+    OnDrawItem = lbSplicedDrawItem
+  end
+  object lblOutput: TLabel
+    Left = 16
+    Height = 18
+    Top = 156
+    Width = 124
+    Caption = 'Exons and Introns'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+end
