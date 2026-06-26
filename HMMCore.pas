@@ -31,8 +31,8 @@ const
   NEG_INF = -1e300;
   P_DONOR    = 0.02;
   P_ACCEPTOR = 0.05;
-  P_START    = 1.0 / 64.0;  // chance of 3 random bases matching ATG
-  P_STOP     = 3.0 / 64.0;  // chance of 3 random bases matching TAA/TAG/TGA
+  P_START    = 1.0 / 64.0;  // chance of 3 ATG
+  P_STOP     = 3.0 / 64.0;  // chance of 3 TAA/TAG/TGA
 
   EmitExon   : array[0..3] of Double = (0.25, 0.25, 0.25, 0.25);
   EmitIntron : array[0..3] of Double = (0.32, 0.32, 0.18, 0.18);

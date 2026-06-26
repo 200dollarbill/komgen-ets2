@@ -1,10 +1,10 @@
 object Form1: TForm1
   Left = 200
-  Height = 697
+  Height = 823
   Top = 80
   Width = 715
   Caption = 'Unit1'
-  ClientHeight = 697
+  ClientHeight = 823
   ClientWidth = 715
   OnCreate = FormCreate
   object lblInput: TLabel
@@ -61,7 +61,7 @@ object Form1: TForm1
   end
   object lbOutput: TListBox
     Left = 12
-    Height = 248
+    Height = 376
     Top = 192
     Width = 674
     Font.Height = -12
@@ -74,18 +74,18 @@ object Form1: TForm1
     OnDrawItem = lbOutputDrawItem
   end
   object lblSpliced: TLabel
-    Left = 8
+    Left = 12
     Height = 18
-    Top = 450
+    Top = 592
     Width = 143
     Caption = 'Output mRNA Exons'
     Font.Style = [fsBold]
     ParentFont = False
   end
   object lbSpliced: TListBox
-    Left = 8
-    Height = 130
-    Top = 470
+    Left = 12
+    Height = 194
+    Top = 612
     Width = 674
     Font.Height = -12
     Font.Name = 'Courier New'

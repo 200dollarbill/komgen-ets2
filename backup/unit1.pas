@@ -6,21 +6,9 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls,
-  ComCtrls, LCLType;
+  ComCtrls, LCLType, HMMCore;
 
 type
-  THMMState = (hsExon, hsIntronStart1, hsIntronStart2, hsIntronStart3,
-               hsIntron, hsIntronEnd1, hsIntronEnd2, hsIntronEnd3);
-
-  TSegmentKind = (skExon, skIntron);
-
-  TSegment = record
-    StartIdx : Integer;
-    EndIdx   : Integer;
-    Kind     : TSegmentKind;
-    Sequence : string;
-  end;
-
   { TForm1 }
 
   TForm1 = class(TForm)
@@ -46,36 +34,30 @@ type
     procedure lbSplicedDrawItem(Control: TWinControl; Index: Integer;
                                 ARect: TRect; State: TOwnerDrawState);
   private
-    FSegments    : array of TSegment;
+    FSegments    : TSegmentArray;
     FSegCount    : Integer;
     FOutputTags  : array of Integer;
     FOutputTagCnt: Integer;
     function  CleanSequence(const Raw: string): string;
-    procedure RunHMM(const Seq: string);
     procedure DisplayResults(const Seq: string);
-    procedure AddSegment(AStart, AEnd: Integer; AKind: TSegmentKind;
-                         const ASeq: string);
     procedure AddOutputLine(const S: string; ATag: Integer);
-    procedure ComputeProbStats(const Seq: string; out ExonLL, IntronLL,
-                               PriorCost, TotalLL, NullLL: Double);
   public
   end;
 
 const
-  TAG_HEADER = 0;
-  TAG_EXON   = 1;
-  TAG_INTRON = 2;
+  TAG_HEADER    = 0;
+  TAG_EXON      = 1;
+  TAG_INTRON    = 2;
+  TAG_NONCODING = 3;
+  TAG_START     = 4;
+  TAG_STOP      = 5;
 
-  CLR_EXON_BG   = $00FFE8B0;
-  CLR_INTRON_BG = $00C8E8FF;
-  CLR_HDR_BG    = $00E8E8E8;
-
-  NEG_INF = -1e300;
-  P_DONOR    = 0.02;
-  P_ACCEPTOR = 0.05;
-
-  EmitExon   : array[0..3] of Double = (0.25, 0.25, 0.25, 0.25);
-  EmitIntron : array[0..3] of Double = (0.32, 0.32, 0.18, 0.18);
+  CLR_EXON_BG      = $00FFE8B0;
+  CLR_INTRON_BG    = $00C8E8FF;
+  CLR_HDR_BG       = $00E8E8E8;
+  CLR_NONCODING_BG = $00D8D8D8;
+  CLR_START_BG     = $00B0FFC8;
+  CLR_STOP_BG      = $00B0B0FF;
 
 var
   Form1: TForm1;
@@ -83,24 +65,6 @@ var
 implementation
 
 {$R *.lfm}
-
-function SafeLog(const X: Double): Double;
-begin
-  if X <= 0.0 then Result := NEG_INF
-  else Result := Ln(X);
-end;
-
-function NtIndex(C: Char): Integer;
-begin
-  case UpCase(C) of
-    'A': Result := 0;
-    'T': Result := 1;
-    'C': Result := 2;
-    'G': Result := 3;
-  else
-    Result := -1;
-  end;
-end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 const
@@ -134,9 +98,12 @@ begin
   else ATag := FOutputTags[Index];
 
   case ATag of
-    TAG_EXON  : BG := CLR_EXON_BG;
-    TAG_INTRON: BG := CLR_INTRON_BG;
-  else          BG := CLR_HDR_BG;
+    TAG_EXON     : BG := CLR_EXON_BG;
+    TAG_INTRON   : BG := CLR_INTRON_BG;
+    TAG_NONCODING: BG := CLR_NONCODING_BG;
+    TAG_START    : BG := CLR_START_BG;
+    TAG_STOP     : BG := CLR_STOP_BG;
+  else             BG := CLR_HDR_BG;
   end;
 
   LB.Canvas.Brush.Color := BG;
@@ -187,220 +154,12 @@ begin
   end;
 end;
 
-procedure TForm1.AddSegment(AStart, AEnd: Integer; AKind: TSegmentKind;
-                             const ASeq: string);
-begin
-  if AEnd < AStart then Exit;
-  if FSegCount >= Length(FSegments) then
-    SetLength(FSegments, FSegCount + 32);
-  FSegments[FSegCount].StartIdx := AStart;
-  FSegments[FSegCount].EndIdx   := AEnd;
-  FSegments[FSegCount].Kind     := AKind;
-  FSegments[FSegCount].Sequence := ASeq;
-  Inc(FSegCount);
-end;
-
-procedure TForm1.RunHMM(const Seq: string);
-var
-  State       : THMMState;
-  i           : Integer;
-  nt          : Char;
-  ExonStart   : Integer;
-  IntronStart : Integer;
-  DonorBuf    : string;
-  AccBuf      : string;
-begin
-  FSegCount := 0;
-  SetLength(FSegments, 64);
-  if Length(Seq) = 0 then Exit;
-
-  State       := hsExon;
-  ExonStart   := 1;
-  IntronStart := 0;
-  DonorBuf    := '';
-  AccBuf      := '';
-
-  i := 1;
-  while i <= Length(Seq) do
-  begin
-    nt := Seq[i];
-    case State of
-
-      hsExon:
-      begin
-        if nt = 'G' then
-        begin
-          DonorBuf    := 'G';
-          IntronStart := i;
-          State       := hsIntronStart1;
-        end;
-      end;
-
-      hsIntronStart1:
-      begin
-        if nt = 'T' then
-        begin
-          DonorBuf := DonorBuf + 'T';
-          State    := hsIntronStart2;
-        end
-        else
-        begin
-          State    := hsExon;
-          DonorBuf := '';
-          if nt = 'G' then
-          begin
-            DonorBuf    := 'G';
-            IntronStart := i;
-            State       := hsIntronStart1;
-          end;
-        end;
-      end;
-
-      hsIntronStart2:
-      begin
-        if nt = 'A' then
-        begin
-          DonorBuf := DonorBuf + 'A';
-          State    := hsIntronStart3;
-        end
-        else
-        begin
-          State    := hsExon;
-          DonorBuf := '';
-          if nt = 'G' then
-          begin
-            DonorBuf    := 'G';
-            IntronStart := i;
-            State       := hsIntronStart1;
-          end;
-        end;
-      end;
-
-      hsIntronStart3:
-      begin
-        if IntronStart - 1 >= ExonStart then
-          AddSegment(ExonStart, IntronStart - 1, skExon,
-                     Copy(Seq, ExonStart, IntronStart - ExonStart));
-        AccBuf := '';
-        State  := hsIntron;
-        Continue;
-      end;
-
-      hsIntron:
-      begin
-        if nt = 'C' then
-        begin
-          AccBuf := 'C';
-          State  := hsIntronEnd1;
-        end;
-      end;
-
-      hsIntronEnd1:
-      begin
-        if nt = 'A' then
-        begin
-          AccBuf := AccBuf + 'A';
-          State  := hsIntronEnd2;
-        end
-        else
-        begin
-          AccBuf := '';
-          State  := hsIntron;
-          if nt = 'C' then
-          begin
-            AccBuf := 'C';
-            State  := hsIntronEnd1;
-          end;
-        end;
-      end;
-
-      hsIntronEnd2:
-      begin
-        if nt = 'G' then
-        begin
-          AccBuf := AccBuf + 'G';
-          State  := hsIntronEnd3;
-        end
-        else
-        begin
-          AccBuf := '';
-          State  := hsIntron;
-          if nt = 'C' then
-          begin
-            AccBuf := 'C';
-            State  := hsIntronEnd1;
-          end;
-        end;
-      end;
-
-      hsIntronEnd3:
-      begin
-        AddSegment(IntronStart, i, skIntron,
-                   Copy(Seq, IntronStart, i - IntronStart + 1));
-        ExonStart := i + 1;
-        AccBuf    := '';
-        State     := hsExon;
-      end;
-
-    end;
-    Inc(i);
-  end;
-
-  case State of
-    hsExon, hsIntronStart1, hsIntronStart2:
-      if ExonStart <= Length(Seq) then
-        AddSegment(ExonStart, Length(Seq), skExon,
-                   Copy(Seq, ExonStart, Length(Seq) - ExonStart + 1));
-    hsIntron, hsIntronEnd1, hsIntronEnd2:
-      if IntronStart <= Length(Seq) then
-        AddSegment(IntronStart, Length(Seq), skIntron,
-                   Copy(Seq, IntronStart, Length(Seq) - IntronStart + 1));
-    else ;
-  end;
-end;
-
-procedure TForm1.ComputeProbStats(const Seq: string; out ExonLL, IntronLL,
-  PriorCost, TotalLL, NullLL: Double);
-var
-  i, j, NtIdx : Integer;
-  seg         : TSegment;
-begin
-  ExonLL    := 0.0;
-  IntronLL  := 0.0;
-  PriorCost := 0.0;
-
-  for i := 0 to FSegCount - 1 do
-  begin
-    seg := FSegments[i];
-    for j := 1 to Length(seg.Sequence) do
-    begin
-      NtIdx := NtIndex(seg.Sequence[j]);
-      if NtIdx < 0 then Continue;
-      if seg.Kind = skExon then
-        ExonLL := ExonLL + SafeLog(EmitExon[NtIdx])
-      else
-        IntronLL := IntronLL + SafeLog(EmitIntron[NtIdx]);
-    end;
-    if seg.Kind = skIntron then
-      PriorCost := PriorCost + SafeLog(P_DONOR) + SafeLog(P_ACCEPTOR);
-  end;
-
-  TotalLL := ExonLL + IntronLL + PriorCost;
-  NullLL := 0.0;
-  for i := 1 to Length(Seq) do
-  begin
-    NtIdx := NtIndex(Seq[i]);
-    if NtIdx >= 0 then
-      NullLL := NullLL + SafeLog(EmitExon[NtIdx]);
-  end;
-end;
-
 procedure TForm1.DisplayResults(const Seq: string);
 var
   i           : Integer;
   seg         : TSegment;
   SplicedExon : string;
-  ExonNum, IntronNum : Integer;
+  NoncodingNum, StartNum, ExonNum, IntronNum, StopNum : Integer;
   ExonLL, IntronLL, PriorCost, TotalLL, NullLL : Double;
 begin
   lbOutput.Items.BeginUpdate;
@@ -410,18 +169,40 @@ begin
 
   AddOutputLine('HMM mRNA SPLICING RESULTS', TAG_HEADER);
   AddOutputLine('Sequence length : ' + IntToStr(Length(Seq)) + ' nt', TAG_HEADER);
+  AddOutputLine('Start codon     : 5'' ATG', TAG_HEADER);
   AddOutputLine('Donor site      : 5'' GTA', TAG_HEADER);
   AddOutputLine('Acceptor site   : CAG 3''', TAG_HEADER);
+  AddOutputLine('Stop codon      : TAA / TAG / TGA 3''', TAG_HEADER);
   AddOutputLine('', TAG_HEADER);
 
-  ExonNum     := 0;
-  IntronNum   := 0;
-  SplicedExon := '';
+  NoncodingNum := 0;
+  StartNum     := 0;
+  ExonNum      := 0;
+  IntronNum    := 0;
+  StopNum      := 0;
+  SplicedExon  := '';
 
   for i := 0 to FSegCount - 1 do
   begin
     seg := FSegments[i];
     case seg.Kind of
+      skNoncoding:
+      begin
+        Inc(NoncodingNum);
+        AddOutputLine(Format('NONCODING #%d   [pos %d..%d]   len=%d',
+          [NoncodingNum, seg.StartIdx, seg.EndIdx, seg.EndIdx - seg.StartIdx + 1]),
+          TAG_NONCODING);
+        AddOutputLine('  ' + seg.Sequence, TAG_NONCODING);
+      end;
+      skStartCodon:
+      begin
+        Inc(StartNum);
+        AddOutputLine(Format('START CODON #%d   [pos %d..%d]   len=%d',
+          [StartNum, seg.StartIdx, seg.EndIdx, seg.EndIdx - seg.StartIdx + 1]),
+          TAG_START);
+        AddOutputLine('  ' + seg.Sequence, TAG_START);
+        SplicedExon := SplicedExon + seg.Sequence;
+      end;
       skExon:
       begin
         Inc(ExonNum);
@@ -439,12 +220,21 @@ begin
           TAG_INTRON);
         AddOutputLine('  ' + seg.Sequence, TAG_INTRON);
       end;
+      skStopCodon:
+      begin
+        Inc(StopNum);
+        AddOutputLine(Format('STOP CODON #%d   [pos %d..%d]   len=%d',
+          [StopNum, seg.StartIdx, seg.EndIdx, seg.EndIdx - seg.StartIdx + 1]),
+          TAG_STOP);
+        AddOutputLine('  ' + seg.Sequence, TAG_STOP);
+        SplicedExon := SplicedExon + seg.Sequence;
+      end;
     end;
   end;
 
   AddOutputLine('', TAG_HEADER);
-  AddOutputLine(Format('Summary: %d exon(s),  %d intron(s) found.',
-                        [ExonNum, IntronNum]), TAG_HEADER);
+  AddOutputLine(Format('Summary: %d noncoding, %d start codon(s), %d exon(s), %d intron(s), %d stop codon(s).',
+                        [NoncodingNum, StartNum, ExonNum, IntronNum, StopNum]), TAG_HEADER);
   lbOutput.Items.EndUpdate;
 
   lbSpliced.Items.Clear;
@@ -452,17 +242,12 @@ begin
   lbSpliced.Items.Add('Length: ' + IntToStr(Length(SplicedExon)) + ' nt');
   lbSpliced.Items.Add(SplicedExon);
 
-  ComputeProbStats(Seq, ExonLL, IntronLL, PriorCost, TotalLL, NullLL);
+  ComputeProbStats(Seq, FSegments, FSegCount, ExonLL, IntronLL, PriorCost, TotalLL, NullLL);
 
   lbSpliced.Items.Add('');
   lbSpliced.Items.Add('HMM / Viterbi Path Probability Statistics');
   lbSpliced.Items.Add(Format('Exon emission log-likelihood     : %.4f', [ExonLL]));
   lbSpliced.Items.Add(Format('Intron emission log-likelihood   : %.4f', [IntronLL]));
-  //lbSpliced.Items.Add(Format('Splice-site prior cost (%d intron(s)) : %.4f',
-  //                            [IntronNum, PriorCost]));
-  //lbSpliced.Items.Add(Format('Total path log-likelihood         : %.4f', [TotalLL]));
-  //lbSpliced.Items.Add(Format('Null model (no splicing) log-lik  : %.4f', [NullLL]));
-  //lbSpliced.Items.Add(Format('Log-odds score (path vs. null)    : %.4f', [TotalLL - NullLL]));
   lbSpliced.Items.Add(Format('Path probability  exp(total LL)   : %.6e', [Exp(TotalLL)]));
 end;
 
@@ -482,7 +267,7 @@ begin
     Exit;
   end;
 
-  RunHMM(Seq);
+  HMMCore.RunHMM(Seq, FSegments, FSegCount);
   DisplayResults(Seq);
 end;
 
